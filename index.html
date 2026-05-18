@@ -333,7 +333,7 @@ function initJoystick() {
 
 // ── WebSocket ──────────────────────────────────────────────
 function getWsUrl() {
-  return `ws://${window.location.hostname || '127.0.0.1'}:8080`;
+  return `wss://recall-royale-server.onrender.com`;
 }
 
 const dotEl    = document.getElementById('dot');
