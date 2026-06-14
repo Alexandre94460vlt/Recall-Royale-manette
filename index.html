@@ -28,15 +28,21 @@
     .screen.active { display: flex; flex-direction: column; }
 
     /* ── LOBBY ─────────────────────────────────── */
-    #lobby { align-items: center; justify-content: center; gap: 24px; padding: 32px; }
+    #lobby { align-items: center; justify-content: center; gap: 16px; padding: 32px; }
     .lobby-title { font-size: 22px; font-weight: 700; letter-spacing: 4px; color: var(--cyan); }
     .lobby-sub   { font-size: 11px; color: var(--muted); letter-spacing: 2px; text-align: center; }
-    .name-input {
+    .name-input, .room-input {
       width: 100%; max-width: 280px; background: var(--surface);
       border: 2px solid var(--border); border-radius: 10px; padding: 14px 18px;
       color: var(--text); font-family: inherit; font-size: 16px; outline: none;
       text-align: center; touch-action: auto; user-select: auto; -webkit-user-select: auto;
       transition: border-color 0.2s;
+    }
+    .room-input {
+      text-transform: uppercase;
+      font-weight: bold;
+      letter-spacing: 4px;
+      border-color: rgba(34, 211, 238, 0.3);
     }
     .color-picker-wrap {
       width: 100%; max-width: 280px; display: flex; align-items: center; justify-content: space-between;
@@ -46,8 +52,8 @@
     .color-input {
       width: 52px; height: 32px; border: 0; border-radius: 8px; background: transparent; padding: 0; cursor: pointer;
     }
-    .name-input:focus { border-color: var(--accent); }
-    .name-input::placeholder { color: var(--muted); }
+    .name-input:focus, .room-input:focus { border-color: var(--accent); }
+    .name-input::placeholder, .room-input::placeholder { color: var(--muted); letter-spacing: normal; }
     .join-btn {
       width: 100%; max-width: 280px; padding: 14px; border-radius: 10px;
       background: var(--accent); border: none; color: #fff;
@@ -103,10 +109,8 @@
     .waiting-title { font-size: 16px; letter-spacing: 3px; color: var(--muted); }
     .waiting-sub   { font-size: 11px; color: var(--muted); line-height: 1.8; }
 
-    /* ── SABOTEUR ANNOUNCED (you are the saboteur, waiting for question) ── */
-    #saboteur-announced {
-      background: #0d0005;
-    }
+    /* ── SABOTEUR ANNOUNCED ────────────────────── */
+    #saboteur-announced { background: #0d0005; }
     #saboteur-announced main {
       flex: 1; display: flex; flex-direction: column;
       align-items: center; justify-content: center; gap: 24px; padding: 32px; text-align: center;
@@ -117,9 +121,7 @@
       font-size: 20px; font-weight: 700; letter-spacing: 4px;
       color: var(--red); text-transform: uppercase;
     }
-    .announced-sub {
-      font-size: 11px; color: var(--muted); letter-spacing: 1px; line-height: 2;
-    }
+    .announced-sub { font-size: 11px; color: var(--muted); letter-spacing: 1px; line-height: 2; }
     .waiting-dots span {
       display: inline-block; width: 8px; height: 8px; border-radius: 50%;
       background: var(--red); margin: 0 3px;
@@ -129,10 +131,8 @@
     .waiting-dots span:nth-child(3) { animation-delay: 0.4s; }
     @keyframes blink { 0%,100%{opacity:0.2} 50%{opacity:1} }
 
-    /* ── SABOTEUR GRID (pick a tile) ───────────── */
-    #saboteur-grid-screen {
-      background: #0d0005;
-    }
+    /* ── SABOTEUR GRID ─────────────────────────── */
+    #saboteur-grid-screen { background: #0d0005; }
     #saboteur-grid-screen main {
       flex: 1; display: flex; flex-direction: column;
       align-items: center; justify-content: center; gap: 12px; padding: 12px;
@@ -162,9 +162,14 @@
 
 <div class="screen active" id="lobby">
   <div class="lobby-title" id="lobby-room-title">CTRL//PAD</div>
-  <div class="lobby-sub">ENTREZ VOTRE NOM POUR REJOINDRE</div>
+  <div class="lobby-sub">REJOINDRE LA SESSION</div>
+  
+  <input class="room-input" id="room-input" type="text" maxlength="4"
+    placeholder="CODE SALON (4 LETTRES)…" autocomplete="off" autocorrect="off" spellcheck="false"/>
+
   <input class="name-input" id="name-input" type="text" maxlength="16"
     placeholder="Votre nom…" autocomplete="off" autocorrect="off" spellcheck="false"/>
+    
   <div class="color-picker-wrap">
     <label for="color-input">COULEUR JOUEUR</label>
     <input class="color-input" id="color-input" type="color" value="#7c3aed"/>
@@ -250,6 +255,7 @@ window.addEventListener('DOMContentLoaded', () => {
   let joyX        = 0, joyY = 0;
   let playerName = '';
   let playerColor = '#7c3aed';
+  let activeRoomCode = '';
   let sabTiles   = [];
   let sabChosen  = null;
   let GRID_COLS  = 8;
@@ -261,10 +267,18 @@ window.addEventListener('DOMContentLoaded', () => {
   const serverParam = urlParams.get('server');
   const roomParam = urlParams.get('room') ? urlParams.get('room').toUpperCase() : '';
 
-  // Identification visuelle de la room
+  // ── Dom Elements ──────────────────────────────────────────
+  const nameInput = document.getElementById('name-input');
+  const roomInput = document.getElementById('room-input');
+  const joinBtn   = document.getElementById('join-btn');
+  const colorInput = document.getElementById('color-input');
   const roomTitleEl = document.getElementById('lobby-room-title') || document.querySelector('.lobby-title');
-  if (roomTitleEl && roomParam) {
-    roomTitleEl.textContent = `CTRL//PAD [${roomParam}]`;
+
+  // Si le code room est passé dans l'URL, on l'affiche et pré-remplit le champ
+  if (roomParam) {
+    activeRoomCode = roomParam;
+    if (roomInput) roomInput.value = roomParam;
+    if (roomTitleEl) roomTitleEl.textContent = `CTRL//PAD [${roomParam}]`;
   }
 
   // ── Screen helper ──────────────────────────────────────────
@@ -284,10 +298,14 @@ window.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  // ── Lobby & inputs ─────────────────────────────────────────
-  const nameInput = document.getElementById('name-input');
-  const joinBtn   = document.getElementById('join-btn');
-  const colorInput = document.getElementById('color-input');
+  // ── Logique de validation du Lobby ─────────────────────────
+  function checkFormValidity() {
+    if (nameInput && roomInput && joinBtn) {
+      const isNameValid = nameInput.value.trim().length > 0;
+      const isRoomValid = roomInput.value.trim().length === 4;
+      joinBtn.disabled = !(isNameValid && isRoomValid);
+    }
+  }
 
   function darkenHex(hex, amount = 0.45) {
     const clean = (hex || '#7c3aed').replace('#', '');
@@ -313,14 +331,20 @@ window.addEventListener('DOMContentLoaded', () => {
     });
   }
 
-  if (nameInput && joinBtn) {
-    nameInput.addEventListener('input', () => {
-      joinBtn.disabled = nameInput.value.trim().length === 0;
+  if (nameInput)  nameInput.addEventListener('input', checkFormValidity);
+  if (roomInput) {
+    roomInput.addEventListener('input', () => {
+      roomInput.value = roomInput.value.toUpperCase(); // Force les majuscules
+      checkFormValidity();
     });
-    
-    nameInput.addEventListener('keydown', e => {
-      if (e.key === 'Enter' && !joinBtn.disabled) joinGame();
-    });
+  }
+
+  if (nameInput && roomInput) {
+    const handleEnter = e => {
+      if (e.key === 'Enter' && joinBtn && !joinBtn.disabled) joinGame();
+    };
+    nameInput.addEventListener('keydown', handleEnter);
+    roomInput.addEventListener('keydown', handleEnter);
   }
 
   if (joinBtn) {
@@ -328,9 +352,12 @@ window.addEventListener('DOMContentLoaded', () => {
   }
 
   function joinGame() {
-    if (!nameInput) return;
+    if (!nameInput || !roomInput) return;
+    
     playerName = nameInput.value.trim();
-    if (!playerName) return;
+    activeRoomCode = roomInput.value.trim().toUpperCase();
+    
+    if (!playerName || activeRoomCode.length !== 4) return;
     
     playerColor = (colorInput ? colorInput.value : '#7c3aed');
     applyThemeColor(playerColor);
@@ -387,14 +414,14 @@ window.addEventListener('DOMContentLoaded', () => {
     
     ws.onopen = () => {
       setStatus('connected');
-      console.log(`📡 Connecté au serveur relais. Room: ${roomParam}`);
+      console.log(`📡 Connecté au serveur relais. Salon: ${activeRoomCode}`);
       
       ws.send(JSON.stringify({ 
         type: 'register', 
         role: 'controller', 
         name: playerName, 
         color: playerColor,
-        room: roomParam 
+        room: activeRoomCode 
       }));
     };
     
