@@ -160,9 +160,8 @@
 </head>
 <body>
 
-<!-- SCREEN 1: Name entry -->
 <div class="screen active" id="lobby">
-  <div class="lobby-title">CTRL//PAD</div>
+  <div class="lobby-title" id="lobby-room-title">CTRL//PAD</div>
   <div class="lobby-sub">ENTREZ VOTRE NOM POUR REJOINDRE</div>
   <input class="name-input" id="name-input" type="text" maxlength="16"
     placeholder="Votre nom…" autocomplete="off" autocorrect="off" spellcheck="false"/>
@@ -173,7 +172,6 @@
   <button class="join-btn" id="join-btn" disabled>REJOINDRE</button>
 </div>
 
-<!-- SCREEN 2: Joystick (alive) -->
 <div class="screen" id="game">
   <div class="game-header">
     <div class="logo" id="player-label">CTRL//PAD</div>
@@ -191,7 +189,6 @@
   </main>
 </div>
 
-<!-- SCREEN 3: Dead / waiting -->
 <div class="screen" id="waiting">
   <div class="game-header">
     <div class="logo" id="waiting-label">CTRL//PAD</div>
@@ -204,7 +201,6 @@
   </main>
 </div>
 
-<!-- SCREEN 4: Saboteur announced — waiting for question phase -->
 <div class="screen" id="saboteur-announced">
   <div class="game-header">
     <div class="logo" style="color:#ef4444">💀 SABOTEUR</div>
@@ -226,7 +222,6 @@
   </main>
 </div>
 
-<!-- SCREEN 5: Saboteur grid — pick a tile -->
 <div class="screen" id="saboteur-grid-screen">
   <div class="game-header">
     <div class="logo" style="color:#ef4444">💀 SABOTAGE</div>
@@ -248,8 +243,8 @@
 <script src="joy.js"></script>
 <script>
 // ── State ──────────────────────────────────────────────────
-let ws         = null;
-let joyX       = 0, joyY = 0;
+let ws          = null;
+let joyX        = 0, joyY = 0;
 let playerName = '';
 let playerColor = '#7c3aed';
 let sabTiles   = [];
@@ -257,6 +252,16 @@ let sabChosen  = null;
 let GRID_COLS  = 8;
 let GRID_ROWS  = 5;
 let tutorialMode = '';
+
+// ── NOUVEAU : Récupération des paramètres de l'URL ──────────
+const urlParams = new URLSearchParams(window.location.search);
+const serverParam = urlParams.get('server');
+const roomParam = urlParams.get('room') ? urlParams.get('room').toUpperCase() : '';
+
+// Si un code room est présent dans l'URL, on l'affiche discrètement dans le titre du lobby
+if (roomParam) {
+  document.getElementById('lobby-room-title').textContent = `CTRL//PAD [${roomParam}]`;
+}
 
 // ── Screen helper ──────────────────────────────────────────
 function showScreen(id) {
@@ -333,7 +338,8 @@ function initJoystick() {
 
 // ── WebSocket ──────────────────────────────────────────────
 function getWsUrl() {
-  return 'wss://recall-royale-server.onrender.com';
+  // Utilise l'URL du serveur passée dans le QR code, ou un fallback par défaut
+  return serverParam || 'wss://recall-royale-server.onrender.com';
 }
 
 const dotEl    = document.getElementById('dot');
@@ -349,7 +355,15 @@ function connect() {
   ws = new WebSocket(getWsUrl());
   ws.onopen = () => {
     setStatus('connected');
-    ws.send(JSON.stringify({ type: 'register', role: 'controller', name: playerName, color: playerColor }));
+    
+    // NOUVEAU : Ajout de la variable "room" dans le payload d'enregistrement
+    ws.send(JSON.stringify({ 
+      type: 'register', 
+      role: 'controller', 
+      name: playerName, 
+      color: playerColor,
+      room: roomParam 
+    }));
   };
   ws.onmessage = e => { try { handleServerMessage(JSON.parse(e.data)); } catch(_) {} };
   ws.onclose = () => { setStatus('offline'); ws = null; };
@@ -404,33 +418,27 @@ function handleServerMessage(msg) {
       break;
 
     case 'eliminated':
-      // Dead → show waiting screen
       showScreen('waiting');
       break;
 
     case 'you_are_saboteur':
-      // Chosen as saboteur at round start → show announcement screen
-      // Grid not shown yet — wait for question phase
       sabChosen = null;
       document.getElementById('sab-confirm').textContent = '';
       showScreen('saboteur-announced');
       break;
 
     case 'saboteur_map':
-      // Question phase started, correct tiles known → show grid
       buildSaboteurGrid(msg.tiles, GRID_COLS, GRID_ROWS);
       showScreen('saboteur-grid-screen');
       break;
 
     case 'saboteur_reset':
-      // Round over → back to waiting
       sabChosen = null;
       document.getElementById('sab-confirm').textContent = '';
       showScreen('waiting');
       break;
     
     case 'new_game':
-      // Reset everything and go back to joystick
       tutorialMode = '';
       sabChosen = null;
       joyX = 0;
@@ -454,7 +462,6 @@ function buildSaboteurGrid(correctTiles, cols, rows) {
   const tileSize  = Math.floor(Math.min(available / cols, available / rows)) - 6;
   grid.style.gridTemplateRows = `repeat(${rows}, ${tileSize}px)`;
 
-  // correctTiles uses {x, y} keys from GDScript
   const correctSet = new Set(correctTiles.map(t => `${t.x},${t.y}`));
   const allowAll = tutorialMode === 'sabotage';
 
